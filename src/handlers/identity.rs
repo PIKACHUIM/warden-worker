@@ -214,8 +214,8 @@ async fn enforce_login_rate_limit(db: &worker::D1Database, key: &str) -> Result<
         .map_err(|_| AppError::Database)?;
 
     let (mut count, mut reset_at) = if let Some(row) = row {
-        let count = row.get("count").and_then(|v| v.as_i64()).unwrap_or(0);
-        let reset_at = row.get("reset_at").and_then(|v| v.as_i64()).unwrap_or(0);
+        let count = row.get("count").and_then(|v| v.as_f64()).map(|v| v as i64).unwrap_or(0);
+        let reset_at = row.get("reset_at").and_then(|v| v.as_f64()).map(|v| v as i64).unwrap_or(0);
         (count, reset_at)
     } else {
         (0, 0)
@@ -232,7 +232,7 @@ async fn enforce_login_rate_limit(db: &worker::D1Database, key: &str) -> Result<
         "INSERT INTO login_rate_limits (key, count, reset_at) VALUES (?1, ?2, ?3)
          ON CONFLICT(key) DO UPDATE SET count = excluded.count, reset_at = excluded.reset_at",
     )
-    .bind(&[key.into(), count.into(), reset_at.into()])?
+    .bind(&[key.into(), (count as f64).into(), (reset_at as f64).into()])?
     .run()
     .await
     .map_err(|_| AppError::Database)?;

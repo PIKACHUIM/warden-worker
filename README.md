@@ -26,7 +26,7 @@ Warden Worker 是一个运行在 Cloudflare Workers 上的轻量级 Bitwarden �
 ### 1. 创建 D1 数据库
 
 ```bash
-wrangler d1 create vault1
+wrangler d1 create cfwarden-db
 ```
 
 把输出的 `database_id` 写入 `wrangler.jsonc` 的 `d1_databases`。
@@ -36,7 +36,7 @@ wrangler d1 create vault1
 注意：`sql/schema_full.sql` 会 `DROP TABLE`，仅用于全新部署（会清空数据）。
 
 ```bash
-wrangler d1 execute vault1 --remote --file=sql/schema_full.sql
+wrangler d1 execute cfwarden-db --remote --file=sql/schema_full.sql
 ```
 
 `sql/schema.sql` 仅保留为历史/兼容用途；推荐新部署直接使用 `sql/schema_full.sql`。
@@ -81,7 +81,7 @@ wrangler deploy
 ## 本地开发
 
 ```bash
-wrangler d1 execute vault1 --local --file=sql/schema_full.sql
+wrangler d1 execute cfwarden-db --local --file=sql/schema_full.sql
 wrangler dev
 ```
 
