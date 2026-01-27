@@ -1,0 +1,111 @@
+name: Deploy to Cloudflare
+
+on:
+  push:
+    branches: [main, uat, release*]
+  workflow_dispatch:
+
+env:
+  DATABASE_NAME: vault1
+
+jobs:
+  deploy:
+    name: Deploy Cloudflare Worker
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Setup Node.js
+      uses: actions/setup-node@v4
+      with:
+        node-version: '18'
+
+    - name: Install Wrangler CLI
+      run: npm install -g wrangler
+
+    - name: Setup Rust toolchain
+      run: |
+        rustup toolchain install stable --profile minimal
+        rustup target add wasm32-unknown-unknown
+
+    - name: Install system dependencies
+      run: sudo apt install -y lld clang gcc llvm
+
+    - name: Install worker-build
+      run: cargo install worker-build
+
+    - name: Authenticate with Cloudflare
+      run: wrangler login
+      env:
+        CLOUDFLARE_API_TOKEN: ${{ secrets.CLOUDFLARE_API_TOKEN }}
+
+    - name: Create D1 database
+      id: create_db
+      run: |
+        # Create D1 database and capture output
+        DB_OUTPUT=$(wrangler d1 create $DATABASE_NAME)
+        echo "$DB_OUTPUT"
+        
+        # Extract database_id from output
+        DATABASE_ID=$(echo "$DB_OUTPUT" | grep -oP 'database_id: \"\K[^\"]+' || echo "")
+        
+        if [ -n "$DATABASE_ID" ]; then
+          echo "DATABASE_ID=$DATABASE_ID" >> $GITHUB_OUTPUT
+          echo "Database created with ID: $DATABASE_ID"
+        else
+          echo "Warning: Could not extract database_id from output"
+          echo "DATABASE_ID=${{ secrets.D1_DATABASE_ID }}" >> $GITHUB_OUTPUT
+        fi
+
+    - name: Update wrangler.jsonc with database ID
+      run: |
+        # Update the first database entry in wrangler.jsonc
+        DATABASE_ID=${{ steps.create_db.outputs.DATABASE_ID || secrets.D1_DATABASE_ID }}
+        
+        # Create a backup and update the file
+        cp wrangler.jsonc wrangler.jsonc.backup
+        
+        # Use jq to update the database_id if available, otherwise use sed
+        if command -v jq &> /dev/null; then
+          jq --arg db_id "$DATABASE_ID" '
+            .d1_databases[0].database_id = $db_id
+          ' wrangler.jsonc.backup > wrangler.jsonc
+        else
+          sed -i "s/\"database_id\": \".*\"/\"database_id\": \"$DATABASE_ID\"/" wrangler.jsonc
+        fi
+        
+        echo "Updated wrangler.jsonc with database_id: $DATABASE_ID"
+
+    - name: Initialize database schema
+      run: wrangler d1 execute $DATABASE_NAME --remote --file=sql/schema_full.sql
+
+    - name: Configure JWT secret
+      run: echo "${{ secrets.JWT_SECRET }}" | wrangler secret put JWT_SECRET
+
+    - name: Configure JWT refresh secret
+      run: echo "${{ secrets.JWT_REFRESH_SECRET }}" | wrangler secret put JWT_REFRESH_SECRET
+
+    - name: Configure allowed emails
+      run: echo "${{ secrets.ALLOWED_EMAILS }}" | wrangler secret put ALLOWED_EMAILS
+
+    - name: Configure 2FA encryption key
+      run: |
+        if [ -n "${{ secrets.TWO_FACTOR_ENC_KEY }}" ]; then
+          echo "${{ secrets.TWO_FACTOR_ENC_KEY }}" | wrangler secret put TWO_FACTOR_ENC_KEY
+        else
+          echo "TWO_FACTOR_ENC_KEY not set, skipping configuration"
+        fi
+
+    - name: Build worker
+      run: worker-build --release
+
+    - name: Deploy to Cloudflare
+      run: wrangler deploy
+
+    - name: Verify deployment
+      run: |
+        echo "Deployment completed successfully!"
+        echo "Database ID: ${{ steps.create_db.outputs.DATABASE_ID || secrets.D1_DATABASE_ID }}"
+        echo "Database Name: $DATABASE_NAME"
