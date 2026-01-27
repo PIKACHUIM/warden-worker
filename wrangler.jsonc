@@ -6,15 +6,9 @@
 	// D1 数据库绑定（必须完整，否则会被认为是新建/覆盖）
 	"d1_databases": [
 		{
-			"binding": "cfwarden-db",
-			"database_id": "${D1_DATABASE_ID}"
-			// database_name 可选，但建议写上以增强可读性
-			// "database_name": "vault1"
-		},
-		{
 			"binding": "cfwarden_db",
 			"database_name": "cfwarden-db",
-			"database_id": "3e47c70d-12f4-4a28-be38-fa5e8ca2a2be",
+			"database_id": "",
 			"remote": true
 		}
 	],

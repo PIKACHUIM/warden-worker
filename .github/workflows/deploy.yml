@@ -6,7 +6,7 @@ on:
   workflow_dispatch:
 
 env:
-  DATABASE_NAME: vault1
+  DATABASE_NAME: cfwarden-db
 
 jobs:
   deploy:
