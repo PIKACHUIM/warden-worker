@@ -14,7 +14,24 @@ Warden Worker 是一个运行在 Cloudflare Workers 上的轻量级 Bitwarden �
 - 核心能力：注册/登录、同步、密码项（Cipher）增删改、文件夹、TOTP（Authenticator）二步验证
 - 官方安卓兼容：支持 `/api/devices/knowndevice` 与 remember-device（twoFactorProvider=5）流程
 
-## 快速部署（Cloudflare）
+## 自动部署（Github Action）
+
+### 0. 前置条件
+- Cloudflare 账号 + R2数据库
+- Github 账号 + Action构建权
+
+### 1. 部署仓库 
+
+1. 点击[Fork本项目](https://github.com/PIKACHUIM/warden-worker/fork)，克隆到你的Github账号
+![QQ20260127-153440.jpg](images/QQ20260127-153440.jpg)
+
+2.
+2. 
+![QQ20260127-150742.jpg](images/QQ20260127-150742.jpg)
+
+
+
+## 手动部署（Cloudflare）
 
 ### 0. 前置条件
 

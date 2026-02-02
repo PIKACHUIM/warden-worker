@@ -321,3 +321,95 @@ fn to_js_val<T: Into<JsValue>>(val: Option<T>) -> JsValue {
 pub async fn send_verification_email() -> String {
     "fixed-token-to-mock".to_string()
 }
+
+#[derive(Debug, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct VerifyPasswordRequest {
+    pub master_password_hash: String,
+}
+
+#[worker::send]
+pub async fn export_vault(
+    claims: Claims,
+    State(env): State<Arc<Env>>,
+    Json(payload): Json<VerifyPasswordRequest>,
+) -> Result<Json<Value>, AppError> {
+    let db = db::get_db(&env)?;
+    
+    // 验证密码
+    let user: Value = db
+        .prepare("SELECT * FROM users WHERE id = ?1")
+        .bind(&[claims.sub.clone().into()])?
+        .first(None)
+        .await
+        .map_err(|_| AppError::Database)?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+    let user: User = serde_json::from_value(user).map_err(|_| AppError::Internal)?;
+
+    if !constant_time_eq(
+        user.master_password_hash.as_bytes(),
+        payload.master_password_hash.as_bytes(),
+    ) {
+        return Err(AppError::Unauthorized("Invalid credentials".to_string()));
+    }
+
+    // 获取所有文件夹
+    let folders: Vec<Value> = db
+        .prepare("SELECT * FROM folders WHERE user_id = ?1")
+        .bind(&[claims.sub.clone().into()])?
+        .all()
+        .await?
+        .results()?;
+
+    // 获取所有密码项
+    let ciphers: Vec<Value> = db
+        .prepare("SELECT * FROM ciphers WHERE user_id = ?1")
+        .bind(&[claims.sub.clone().into()])?
+        .all()
+        .await?
+        .results()?;
+
+    // 返回备份数据
+    Ok(Json(json!({
+        "encrypted": true,
+        "folders": folders,
+        "items": ciphers,
+    })))
+}
+
+#[worker::send]
+pub async fn delete_account(
+    claims: Claims,
+    State(env): State<Arc<Env>>,
+    Json(payload): Json<VerifyPasswordRequest>,
+) -> Result<Json<Value>, AppError> {
+    let db = db::get_db(&env)?;
+    
+    // 验证密码
+    let user: Value = db
+        .prepare("SELECT * FROM users WHERE id = ?1")
+        .bind(&[claims.sub.clone().into()])?
+        .first(None)
+        .await
+        .map_err(|_| AppError::Database)?
+        .ok_or_else(|| AppError::NotFound("User not found".to_string()))?;
+    let user: User = serde_json::from_value(user).map_err(|_| AppError::Internal)?;
+
+    if !constant_time_eq(
+        user.master_password_hash.as_bytes(),
+        payload.master_password_hash.as_bytes(),
+    ) {
+        return Err(AppError::Unauthorized("Invalid credentials".to_string()));
+    }
+
+    // 删除用户数据（由于外键约束，会级联删除相关数据）
+    db.prepare("DELETE FROM users WHERE id = ?1")
+        .bind(&[claims.sub.into()])?
+        .run()
+        .await
+        .map_err(|_| AppError::Database)?;
+
+    Ok(Json(json!({
+        "message": "Account deleted successfully"
+    })))
+}
